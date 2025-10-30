@@ -125,11 +125,25 @@ def count_textures(layout):
 
     print("\nTexture count summary:")
     for texture, count in sorted(counts.items()):
-        print(f"{texture}: {count}")
+        stacks = count // 64
+        remainder = count % 64
+        if stacks > 0:
+            stack_str = f"{stacks} stack" if stacks == 1 else f"{stacks} stacks"
+            output = f"{stack_str} + {remainder}" if remainder > 0 else stack_str
+        else:
+            output = f"{remainder}"
+        print(f"{texture}: {output}")
 
     with open("texture_counts.txt", "w") as f:
         for texture, count in sorted(counts.items()):
-            f.write(f"{texture}: {count}\n")
+            stacks = count // 64
+            remainder = count % 64
+            if stacks > 0:
+                stack_str = f"{stacks} stack" if stacks == 1 else f"{stacks} stacks"
+                output = f"{stack_str} + {remainder}" if remainder > 0 else stack_str
+            else:
+                output = f"{remainder}"
+            f.write(f"{texture}: {output}\n")
 
     return counts
 
