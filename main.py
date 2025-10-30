@@ -6,9 +6,9 @@ from collections import Counter
 # ==========================================================
 # CONFIGURATION
 # ==========================================================
-BUILD_LENGTH = 20  # Number of tiles horizontally
-BUILD_WIDTH = 20   # Number of tiles vertically
-BLOCK_TYPES = ["Wool", "Terracotta", "Concrete"]
+BUILD_LENGTH = 100  # Number of tiles horizontally
+BUILD_WIDTH = 100   # Number of tiles vertically
+BLOCK_TYPES = ["Wool", "Concrete", "Terracotta"] # Available types: ["Wool", "Concrete", "Terracotta"]
 
 SOURCE_IMAGE = "image.png"
 
