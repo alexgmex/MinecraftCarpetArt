@@ -132,9 +132,9 @@ def build_mosaic(layout, base_dir):
 
 
 # ==========================================================
-# STEP 5 — COUNT REQUIRED TEXTURES
+# STEP 5 — COUNT REQUIRED TEXTURES + GENERATE INSTRUCTIONS
 # ==========================================================
-def count_textures(layout):
+def generate_materials_and_instructions(layout, build_width, build_length):
     counts = Counter()
     for row in layout:
         for key in row:
@@ -143,18 +143,18 @@ def count_textures(layout):
             _, tex_name = key.split("::")
             counts[tex_name] += 1
 
-    print("\nTexture count summary:")
-    for texture, count in sorted(counts.items()):
-        stacks = count // 64
-        remainder = count % 64
-        if stacks > 0:
-            stack_str = f"{stacks} stack" if stacks == 1 else f"{stacks} stacks"
-            output = f"{stack_str} + {remainder}" if remainder > 0 else stack_str
-        else:
-            output = f"{remainder}"
-        print(f"{texture}: {output}")
+    total_blocks = sum(counts.values())
 
-    with open("texture_counts.txt", "w") as f:
+    # WRITE TO materials_and_instructions.txt
+    with open("materials_and_instructions.txt", "w", encoding="utf-8") as f:
+        # --- HEADER: Build Size ---
+        f.write("=== BUILD SIZE ===\n")
+        f.write(f"Width (X): {build_length} blocks\n")
+        f.write(f"Height (Y): {build_width} blocks\n")
+        f.write(f"Total Blocks: {total_blocks}\n\n")
+
+        # --- MATERIAL LIST ---
+        f.write("=== MATERIAL LIST ===\n")
         for texture, count in sorted(counts.items()):
             stacks = count // 64
             remainder = count % 64
@@ -164,6 +164,42 @@ def count_textures(layout):
             else:
                 output = f"{remainder}"
             f.write(f"{texture}: {output}\n")
+
+        # --- INSTRUCTIONS ---
+        f.write("\n=== INSTRUCTIONS ===\n")
+        rows, cols = layout.shape
+
+        # Build instructions bottom to top
+        for i in range(rows - 1, -1, -1):
+            row = layout[i]
+            row_instructions = []
+            current_block = None
+            current_count = 0
+
+            for key in row:
+                if key == "__EMPTY__":
+                    block_name = "EMPTY"
+                else:
+                    _, block_name = key.split("::")
+
+                if block_name == current_block:
+                    current_count += 1
+                else:
+                    if current_block is not None:
+                        row_instructions.append(f"{current_block} x{current_count}")
+                    current_block = block_name
+                    current_count = 1
+
+            # add final group
+            if current_block is not None:
+                row_instructions.append(f"{current_block} x{current_count}")
+
+            row_str = ", ".join(row_instructions)
+            f.write(f"ROW [{rows - i}]: {row_str}\n")
+
+    # SIMPLIFIED CONSOLE OUTPUT
+    print(f"\nDone! Mosaic and build instructions generated.")
+    print(f"Total blocks required: {total_blocks}")
 
     return counts
 
@@ -178,6 +214,4 @@ if __name__ == "__main__":
     resized_pixels = resize_image(SOURCE_IMAGE, BUILD_LENGTH, BUILD_WIDTH, SAVE_RESIZED)
     texture_layout = match_texture_layout(resized_pixels, texture_colours)
     build_mosaic(texture_layout, TEXTURE_DIR)
-    count_textures(texture_layout)
-
-    print("\nDone! Mosaic and texture counts generated.")
+    generate_materials_and_instructions(texture_layout, BUILD_WIDTH, BUILD_LENGTH)
