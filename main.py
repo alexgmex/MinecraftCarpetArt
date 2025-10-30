@@ -6,14 +6,14 @@ from collections import Counter
 # ==========================================================
 # CONFIGURATION
 # ==========================================================
-BUILD_LENGTH = 100   # Number of tiles horizontally
-BUILD_WIDTH = 100    # Number of tiles vertically
+BUILD_LENGTH = 20  # Number of tiles horizontally
+BUILD_WIDTH = 20   # Number of tiles vertically
 BLOCK_TYPES = ["Wool", "Terracotta", "Concrete"]
 
 SOURCE_IMAGE = "image.png"
 
 TEXTURE_DIR = "Textures"  # Base directory
-SAVE_RESIZED = False     # Whether to save the resized image
+SAVE_RESIZED = False      # Whether to save the resized image
 
 # ==========================================================
 # STEP 1 — LOAD TEXTURE COLOURS
@@ -41,9 +41,7 @@ def load_texture_colours(base_dir, block_types):
                 path = os.path.join(folder_path, filename)
                 pixels = np.array(Image.open(path).convert("RGB"))
                 avg_colour = pixels.mean(axis=(0, 1))
-                # texture name is filename without extension
                 texture_name = filename[:-4]
-                # unique internal key (subfolder + name) to avoid duplicates
                 internal_key = f"{subfolder}::{texture_name}"
                 colour_dict[internal_key] = avg_colour
 
@@ -56,27 +54,48 @@ def load_texture_colours(base_dir, block_types):
 # STEP 2 — RESIZE INPUT IMAGE
 # ==========================================================
 def resize_image(path, width, height, save=False):
-    img = Image.open(path).convert("RGB")
+    img = Image.open(path).convert("RGBA")  # keep alpha channel
     resized = img.resize((width, height), Image.Resampling.LANCZOS)
     if save:
         resized.save("resized.png")
-    return np.array(resized)
+    return np.array(resized)  # shape (H, W, 4)
 
 
 # ==========================================================
 # STEP 3 — MAP IMAGE PIXELS TO NEAREST TEXTURE COLOUR
 # ==========================================================
 def match_texture_layout(image_pixels, colour_dict):
-    texture_keys = np.array(list(colour_dict.keys()))  # e.g., "Wool::black_wool"
+    """
+    Match non-transparent pixels to nearest texture colour.
+    Transparent pixels will be marked as '__EMPTY__'.
+    """
+    texture_keys = np.array(list(colour_dict.keys()))
     texture_values = np.stack(list(colour_dict.values()))
-    pixels = image_pixels.reshape(-1, 3).astype(float)
 
-    diff = pixels[:, None, :] - texture_values[None, :, :]
+    rows, cols, _ = image_pixels.shape
+    layout = np.empty((rows, cols), dtype=object)
+
+    print("Matching pixels to textures (ignoring transparent pixels)...")
+
+    rgb_pixels = image_pixels[..., :3].astype(float)
+    alpha = image_pixels[..., 3]
+
+    pixels_flat = rgb_pixels.reshape(-1, 3)
+    alpha_flat = alpha.flatten()
+
+    # Compute distances only for opaque pixels
+    opaque_mask = alpha_flat > 0
+    opaque_pixels = pixels_flat[opaque_mask]
+
+    diff = opaque_pixels[:, None, :] - texture_values[None, :, :]
     dists = np.sum(diff ** 2, axis=2)
     best_indices = np.argmin(dists, axis=1)
     best_keys = texture_keys[best_indices]
 
-    layout = best_keys.reshape(image_pixels.shape[:2])
+    layout_flat = np.full(alpha_flat.shape, "__EMPTY__", dtype=object)
+    layout_flat[opaque_mask] = best_keys
+    layout = layout_flat.reshape(rows, cols)
+
     return layout
 
 
@@ -84,7 +103,7 @@ def match_texture_layout(image_pixels, colour_dict):
 # STEP 4 — BUILD MOSAIC IMAGE FROM LAYOUT
 # ==========================================================
 def build_mosaic(layout, base_dir):
-    unique_keys = np.unique(layout)
+    unique_keys = [k for k in np.unique(layout) if k != "__EMPTY__"]
     tile_dict = {}
 
     for key in unique_keys:
@@ -94,12 +113,15 @@ def build_mosaic(layout, base_dir):
 
     tile_w, tile_h = next(iter(tile_dict.values())).size
     rows, cols = layout.shape
-    mosaic_img = Image.new("RGB", (cols * tile_w, rows * tile_h))
+    mosaic_img = Image.new("RGBA", (cols * tile_w, rows * tile_h), (0, 0, 0, 0))
 
-    print("Building mosaic (this may take a while)...")
+    print("Building mosaic (transparent areas left blank)...")
     for i in range(rows):
         for j in range(cols):
-            tile = tile_dict[layout[i, j]]
+            key = layout[i, j]
+            if key == "__EMPTY__":
+                continue  # skip transparent pixel
+            tile = tile_dict[key]
             mosaic_img.paste(tile, (j * tile_w, i * tile_h))
         if i % 10 == 0:
             print(f"  Row {i}/{rows} complete")
@@ -113,13 +135,11 @@ def build_mosaic(layout, base_dir):
 # STEP 5 — COUNT REQUIRED TEXTURES
 # ==========================================================
 def count_textures(layout):
-    """
-    Count how many times each texture appears in the final layout.
-    Output clean names (e.g. 'black_wool') without folder prefixes.
-    """
     counts = Counter()
     for row in layout:
         for key in row:
+            if key == "__EMPTY__":
+                continue
             _, tex_name = key.split("::")
             counts[tex_name] += 1
 
