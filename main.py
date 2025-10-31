@@ -134,6 +134,8 @@ def build_mosaic(layout, base_dir):
 # ==========================================================
 # STEP 5 — COUNT REQUIRED TEXTURES + GENERATE INSTRUCTIONS
 # ==========================================================
+from collections import Counter
+
 def generate_materials_and_instructions(layout, build_width, build_length):
     counts = Counter()
     for row in layout:
@@ -169,39 +171,71 @@ def generate_materials_and_instructions(layout, build_width, build_length):
         f.write("\n=== INSTRUCTIONS ===\n")
         rows, cols = layout.shape
 
-        # Build instructions bottom to top
-        for i in range(rows - 1, -1, -1):
-            row = layout[i]
-            row_instructions = []
-            current_block = None
-            current_count = 0
+        # Decide direction: rows or columns
+        if rows <= cols:
+            # Build is wider than tall → go row by row (bottom to top)
+            f.write("Instruction Direction: ROW-BY-ROW (bottom to top, left to right)\n\n")
+            for i in range(rows - 1, -1, -1):  # start from bottom
+                row = layout[i]
+                row_instructions = []
+                current_block = None
+                current_count = 0
 
-            for key in row:
-                if key == "__EMPTY__":
-                    block_name = "EMPTY"
-                else:
-                    _, block_name = key.split("::")
+                for key in row:
+                    if key == "__EMPTY__":
+                        block_name = "EMPTY"
+                    else:
+                        _, block_name = key.split("::")
 
-                if block_name == current_block:
-                    current_count += 1
-                else:
-                    if current_block is not None:
-                        row_instructions.append(f"{current_block} x{current_count}")
-                    current_block = block_name
-                    current_count = 1
+                    if block_name == current_block:
+                        current_count += 1
+                    else:
+                        if current_block is not None:
+                            row_instructions.append(f"{current_block} x{current_count}")
+                        current_block = block_name
+                        current_count = 1
 
-            # add final group
-            if current_block is not None:
-                row_instructions.append(f"{current_block} x{current_count}")
+                if current_block is not None:
+                    row_instructions.append(f"{current_block} x{current_count}")
 
-            row_str = ", ".join(row_instructions)
-            f.write(f"ROW [{rows - i}]: {row_str}\n")
+                row_str = ", ".join(row_instructions)
+                f.write(f"ROW [{rows - i}]: {row_str}\n")
+
+        else:
+            # Build is taller than wide → go column by column (left to right, bottom to top)
+            f.write("Instruction Direction: COLUMN-BY-COLUMN (left to right, bottom to top)\n\n")
+            for j in range(cols):  # for each column left to right
+                col_instructions = []
+                current_block = None
+                current_count = 0
+
+                for i in range(rows - 1, -1, -1):  # bottom to top
+                    key = layout[i][j]
+                    if key == "__EMPTY__":
+                        block_name = "EMPTY"
+                    else:
+                        _, block_name = key.split("::")
+
+                    if block_name == current_block:
+                        current_count += 1
+                    else:
+                        if current_block is not None:
+                            col_instructions.append(f"{current_block} x{current_count}")
+                        current_block = block_name
+                        current_count = 1
+
+                if current_block is not None:
+                    col_instructions.append(f"{current_block} x{current_count}")
+
+                col_str = ", ".join(col_instructions)
+                f.write(f"COLUMN [{j + 1}]: {col_str}\n")
 
     # SIMPLIFIED CONSOLE OUTPUT
     print(f"\nDone! Mosaic and build instructions generated.")
     print(f"Total blocks required: {total_blocks}")
 
     return counts
+
 
 
 # ==========================================================
